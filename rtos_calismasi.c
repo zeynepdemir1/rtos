@@ -1,23 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
-
-#define PARASUT_BITI 4
-#define PARASUT_AC()  (port->tum_veriler |= (1<<PARASUT_BITI))
-#define PARASUT_KAPAT()  (port->tum_veriler &= ~(1<<PARASUT_BITI))
-#define PARASUT_TERSLE() (port->tum_veriler ^= (1<<PARASUT_BITI))
-
-#define ERROR_BASLANGIC 0
-#define ERROR_MASKE 0X0F
-#define ERROR_OKU() ((port->tum_veriler >> ERROR_BASLANGIC)&ERROR_MASKE)
-#define ERROR_TEMIZLE() (port->tum_veriler &= ~(ERROR_MASKE<<ERROR_BASLANGIC))
-#define ERROR_YAZ(deger)  (ERROR_TEMIZLE(), port->tum_veriler |= ((deger&ERROR_MASKE)<<ERROR_BASLANGIC) )
-
-#define SENSOR_BASLANGIC 5
-#define SENSOR_MASKE 0X7FFFFFF
-#define SENSOR_OKU() ((port->tum_veriler>>SENSOR_BASLANGIC) & SENSOR_MASKE)
-#define SENSOR_TEMIZLE()  ((port->tum_veriler) &= ~(SENSOR_MASKE<<SENSOR_BASLANGIC))  
-#define SENSOR_YAZ(sicaklik)  (SENSOR_TEMIZLE(),(port->tum_veriler) |= ((sicaklik&SENSOR_MASKE)<<SENSOR_BASLANGIC))
-
+#include <unistd.h>
 
 uint32_t bellek_alani;
 
@@ -28,36 +11,50 @@ union telemetriler{
     struct {
         uint32_t error: 4 ;
         uint32_t parasut: 1 ;
-        uint32_t sensor:27 ;
+        uint32_t yukseklik: 12;
+        uint32_t sicaklik: 8;
+        uint32_t batarya: 7;
     }bit_fields;
 };
 
+
 volatile union telemetriler *const port = (union telemetriler*)&bellek_alani;
 
+uint32_t sahte_barometre_oku(uint32_t eski_yukseklik){
+    if(eski_yukseklik-150){
+        return eski_yukseklik - 150;
+    } return 0;
+
+}
+
+
+
 int main(){
+ 
+    port->bit_fields.error = 0;
+    port->bit_fields.yukseklik = 2000;
+    port->bit_fields.sicaklik = 25; 
+    port->bit_fields.batarya = 100;
+
+    while(1){
+        port->bit_fields.yukseklik=sahte_barometre_oku(port->bit_fields.yukseklik);
+        printf("İrtifa: %d metre\n",port->bit_fields.yukseklik);
+
+        if(port->bit_fields.yukseklik < 400){
+            port->bit_fields.parasut = 1;
+            printf("Paraşüt açılıyor!\n");
+
+            break;
     
-    printf("1. Rampa Durumu\n");
-    printf("Ham Paket Degeri: %u\n\n", port->tum_veriler);
-
-    SENSOR_YAZ(1024);
-    printf("2. Sensor Verisi Eklendi\n");
-    printf("Ham Paket Degeri: %u\n\n", port->tum_veriler);
+    }
+        sleep(1);
+    }
 
 
-    ERROR_YAZ(3);
-    printf("3. Hata Kodu Eklendi\n");
-    printf("Ham Paket Degeri: %u\n\n", port->tum_veriler);
-
-    PARASUT_AC();
-    printf("4. Parasut Acildi\n");
-    printf("Ham Paket Degeri: %u\n\n", port->tum_veriler);
-
-
-    printf("PAKET COZUMLEMESI\n");
-    
-    printf("Okunan Hata Kodu  : %u\n", ERROR_OKU());
-    printf("Parasut Durumu    : %u\n", (port->tum_veriler >> PARASUT_BITI) & 1); 
-    printf("Okunan Sensor Veri: %u\n", SENSOR_OKU());
+    printf("   Güncel Değerler\n");
+    printf("Sıcaklık: %d\n",port->bit_fields.sicaklik);
+    printf("Yükseklik: %d\n",port->bit_fields.yukseklik);
+    printf("Batarya: %d\n",port->bit_fields.batarya);
 
     return 0;
 }
